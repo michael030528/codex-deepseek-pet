@@ -1,0 +1,18 @@
+Use case: precise-object-edit / identity-preserve.
+Edit the supplied 8-cell sprite sheet. It is a LEFT-facing SMALL-STEP WALK animation; read top row 0,1,2,3 then bottom row 4,5,6,7. Preserve the exact faces, head dimensions, blue hair, maid clothing, arms, tail, per-cell scale and placement of this image. Keep all eight complete characters and the 4-by-2 layout. True transparent alpha background. Do not redesign anything above the lower edge of the skirt.
+
+Repair ONLY the short lower legs and shoes so they follow the 8 poses of reference 2. The main error is that frames 1 and 2 repeat a trailing raised foot, and frame 2 is missing a passing stride. It must progress from support foot AHEAD of the body to UNDER the body to BEHIND the body. For screen-left walking, "ahead" means image LEFT, "behind" means image RIGHT.
+
+Make these very specific changes:
+Frame 0: keep the initial left-foot-ahead contact.
+Frame 1: a ground-contact shoe slightly left of pelvis, other shoe directly behind it and only slightly above floor; reduce the backward knee bend so this is low stepping, NOT heel kicked toward backside.
+Frame 2 (top row THIRD character): ground-contact shoe vertically below the pelvis center, supporting sock straight down. The OTHER shoe passes JUST IN FRONT of that supporting ankle, on the screen-left side, only 8 pixels above floor. The shoes nearly overlap horizontally, making a small compact passing pose. DO NOT keep a bent shoe raised behind her.
+Frame 3: ground-contact shoe a little behind the pelvis to screen RIGHT, other shoe extended a short distance to screen LEFT, hovering only 8 pixels above ground.
+Frame 4: same split-contact stage as frame 0 but OTHER ANATOMICAL leg forward: the far leg is ahead and near leg behind.
+Frame 5: same low support stage as frame 1 but the opposite leg, modest clearance. NO butt kick.
+Frame 6 (bottom row THIRD character): planted FAR shoe directly below pelvis; swinging NEAR shoe passes IN FRONT of that planted ankle, toward screen LEFT, barely 8 pixels above the floor. This is the opposite-foot compact passing pose to frame 2. The near sock visibly overlaps the far sock. DO NOT show two flat shoes spread sideways.
+Frame 7: FAR ground-contact shoe just behind pelvis to screen RIGHT; NEAR swinging shoe a short distance ahead to screen LEFT, only 8 pixels above ground, ready to land in frame 0.
+
+The lower legs remain extremely SHORT. No leg length growth, no high knees, no running, no hops. At least one shoe sole stays on ground in each pose. Small step length. This exact character is the required invariant. Render coherent whole drawn frames; no pasted feet, no skeleton marks, no new objects, no labels, no visible grid, no shadows.
+
+Add transparent margin around all characters so no tail touches edge of canvas.

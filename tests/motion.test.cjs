@@ -1,150 +1,206 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {sample,clips}=require('../src/renderer/motion.js');const sharp=require('sharp');
-test('every sampled frame fits its actual atlas and finite actions recover',async()=>{
- const cache={};
+const {sample,clips,atlasNames,blinkFrame,blinkAt,recoveryClip,transition,turnFrames,requiredFrames,isNeutral,exitFrames}=require('../src/renderer/motion.js');
+const {ACTIONS}=require('../src/main/behavior.cjs');
+const originalActions=['meal-break','token-game','tail-sway','story-recover','stop-left','stop-right','wake','drag','fall','land','shift','settle','breathe','idle','think','proud','happy','hungry','eat','protest','sad','wave','sleep','left','right','surprise','jump','peek','dance','stretch','sneak','satisfied','review','shock','pout','sorry','hum','curl'];
+const duration=c=>c.times.reduce((a,b)=>a+b,0);
+const startOffset=action=>['left','right'].includes(action)?600:0;
+const poseFields=['x','y','scaleX','scaleY','rotation','duration'];
+
+test('all original actions have valid custom clips and deterministic finite samples',()=>{
+ for(const name of new Set([...originalActions,...Object.keys(ACTIONS)])){
+  const c=clips[name];assert.ok(c,`missing action: ${name}`);
+  assert.match(c.atlas,/^custom-/);assert.ok(atlasNames.includes(c.atlas));
+  assert.ok(c.frames.length>0);assert.equal(c.frames.length,c.times.length);
+  assert.ok(c.frames.every(f=>Number.isInteger(f)&&f>=0),name);
+  assert.ok(c.times.every(t=>Number.isFinite(t)&&t>0),name);
+  for(const t of [0,37,duration(c)/2+startOffset(name),duration(c)+startOffset(name),100000]){
+   const p=sample(name,t);assert.deepEqual(p,sample(name,t));
+   assert.ok(atlasNames.includes(p.atlas));assert.equal(p.columns,4);
+   assert.ok(Number.isInteger(p.frame)&&p.frame>=0);assert.equal(p.flip,false);
+   for(const key of poseFields)assert.ok(Number.isFinite(p[key]),`${name}/${t}: ${key}`);
+   assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);
+   for(const key of ['nextAtlas','nextFrame','frameMix','entryFlow'])assert.equal(key in p,false,`${name}/${t}: only authored frames may be sampled`);
+  }
+ }
+ assert.deepEqual(sample('unknown-action',0),sample('idle',0));
+});
+
+test('finite actions return to idle while sleeping and other held actions retain their last frame',()=>{
  for(const [name,c]of Object.entries(clips)){
-  const duration=c.times.reduce((a,b)=>a+b,0);
-  for(let t=0;t<duration+650;t+=37){
-   const p=sample(name,t);cache[p.atlas]??=await sharp(path.join(__dirname,'../assets/whale',p.atlas+'.png')).metadata();
-   const m=cache[p.atlas],cell=m.width/p.columns;assert.ok((Math.floor(p.frame/p.columns)+1)*cell<=m.height,`${name} at ${t}: ${p.atlas}/${p.frame}`);
+  const end=duration(c)+startOffset(name);
+  if(!c.loop&&!c.hold){
+   assert.deepEqual(sample(name,end),sample('idle',0),name);
+   assert.deepEqual(sample(name,end+1500),sample('idle',1500),name);
+  }else if(c.hold)for(const t of [end,end+1,100000]){
+   const p=sample(name,t);assert.equal(p.atlas,c.atlas,name);assert.equal(p.frame,c.frames.at(-1),name);
   }
  }
- for(const c of Object.values(clips)){assert.equal(c.frames.length,c.times.length);assert.ok(c.times.every(t=>t>0));}
-});
-test('walk completes one continuous cycle without grouped pose holds',()=>{
- const c=clips.right;let elapsed=600;const frames=[];
- for(const time of c.times){frames.push(sample('right',elapsed+1).frame);elapsed+=time;}
- assert.equal(new Set(frames).size,c.frames.length);assert.equal(sample('right',elapsed).frame,c.frames[0]);
- assert.ok(Math.max(...c.times)<=110);assert.equal(sample('left',95).flip,true);
+ assert.equal(clips.sleep.hold,true);assert.equal(sample('sleep',100000).frame,7);
+ for(const action of ['curl','meal-break']){assert.equal(clips[action].hold,false);assert.equal(clips[action].loop,false);assert.deepEqual(sample(action,100000),sample('idle',100000-duration(clips[action])));}
 });
 
-test('walking turns the whole body before stepping and stops toward the front',()=>{
- for(const action of ['left','right']){
-  for(let frame=0;frame<8;frame++){const p=sample(action,frame*75);assert.equal(p.atlas,'motion-turn');assert.equal(p.walking,false);assert.equal(p.frame,frame);}
-  assert.equal(sample(action,600).atlas,'inbetween-walk');
-  assert.equal(sample('stop-'+action,0).frame,6);assert.equal(sample('stop-'+action,380).frame,0);
-  assert.equal(sample('stop-'+action,450).atlas,'idle-front');
+test('both walking directions turn for 600ms then use independent non-mirrored gait clips',()=>{
+ assert.notEqual(clips.left.atlas,clips.right.atlas);
+ assert.equal(clips.left.atlas,'custom-running-left');assert.equal(clips.right.atlas,'custom-running-right');
+ for(const action of ['right','left']){
+  const frames=turnFrames[action];assert.equal(frames.length,6);
+  for(let i=0;i<frames.length;i++)for(const t of [i*100,i*100+99]){
+   const p=sample(action,t);assert.equal(p.atlas,'custom-turn');assert.equal(p.frame,frames[i]);
+   assert.equal(p.walking,false);assert.equal(p.flip,false);
+  }
+  const firstWalk=sample(action,600);assert.equal(firstWalk.atlas,clips[action].atlas);
+  assert.equal(firstWalk.frame,clips[action].frames[0]);assert.equal(firstWalk.walking,true);assert.equal(firstWalk.flip,false);
+  let at=600;
+  for(const [index,ms]of clips[action].times.entries()){assert.equal(sample(action,at).frame,clips[action].frames[index]);at+=ms;}
+  assert.equal(sample(action,at).frame,clips[action].frames[0]);
+  const stop='stop-'+action,c=clips[stop];
+  assert.deepEqual(c.frames,frames.slice(0,-1).reverse());assert.equal(duration(c),400);
+  assert.equal(sample(stop,0).frame,frames.at(-2));assert.equal(sample(stop,duration(c)-1).frame,frames[0]);
+  assert.equal(sample(stop,duration(c)).atlas,'custom-idle');
  }
+ assert.equal(requiredFrames('custom-turn').includes(9),false,'retired high-kick launch must not preload');
+ assert.equal(requiredFrames('custom-turn').includes(11),false,'retired opposite launch must not preload');
 });
-test('one-shot has recovery to idle and sleeping has a held final pose',()=>{
- assert.equal(sample('eat',5000).atlas,'idle-front');assert.ok(sample('eat',5000).frame<16);
- assert.equal(sample('sleep',100000).frame,31);assert.equal(sample('jump',2000).atlas,'idle-front');
-});
-test('sampling is independent of rendering frequency and reduced motion is still',()=>{
- assert.deepEqual(sample('dance',613),sample('dance',613));
- for(const name of Object.keys(clips)){const a=sample(name,0,true),b=sample(name,50,true);assert.deepEqual(a,b);}
-});
-test('expanded motion atlases contain complete transparent cells with margins',async()=>{
- for(const name of ['motion-basic','motion-extra']){
- const {data,info}=await sharp(path.join(__dirname,'../assets/whale',name+'.png')).raw().toBuffer({resolveWithObject:true});
- const count=name==='motion-basic'?48:64;
- assert.equal(info.channels,4);assert.equal(info.width,4096);assert.equal(info.height,count/8*512);
- for(let i=0;i<count;i++){let visible=0;for(let y=0;y<512;y++)for(let x=0;x<512;x++){
- const a=data[((Math.floor(i/8)*512+y)*4096+(i%8)*512+x)*4+3];if(a>200)visible++;
- if(x<12||x>499||y<12||y>499)assert.equal(a,0);
- }assert.ok(visible>3000,`${name} ${i} visible`);}
+
+test('timeline stages are contiguous and coincide with real frame boundaries',()=>{
+ for(const [action,c]of Object.entries(clips)){
+  if(!c.stages)continue;
+  let at=0;const boundaryFrame=new Map([[0,0]]);
+  c.times.forEach((ms,index)=>{at+=ms;boundaryFrame.set(at,index+1);});
+  assert.equal(c.stages[0].start,0,action);assert.equal(c.stages.at(-1).end,at,action);
+  for(const [index,stage]of c.stages.entries()){
+   assert.ok(stage.end>stage.start,`${action}/${stage.name}`);
+   assert.ok(boundaryFrame.has(stage.start));assert.ok(boundaryFrame.has(stage.end));
+   if(index)assert.equal(stage.start,c.stages[index-1].end);
+   assert.equal(sample(action,stage.start).frame,c.frames[boundaryFrame.get(stage.start)]);
+   assert.equal(sample(action,stage.end-1).frame,c.frames[boundaryFrame.get(stage.end)-1]);
+  }
  }
+ const closed=clips.sleep.stages.find(s=>s.name==='close-eyes').start;
+ for(let t=closed;t<10000;t+=19)assert.ok([5,6,7].includes(sample('sleep',t).frame));
 });
-test('runtime has no gaze frame mapping or pointer direction subscription',()=>{
- for(const file of ['src/renderer/app.js','src/preload.cjs','src/main/main.cjs']){
- const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');assert.doesNotMatch(source,/lookIndex|pointerVector|onPointer|gaze\.png/);
+
+test('reduced motion remains still even long after a finite clip would normally finish',()=>{
+ for(const action of Object.keys(clips)){
+  const initial=sample(action,0,true);
+  for(const t of [50,599,600,duration(clips[action])+1,100000])assert.deepEqual(sample(action,t,true),initial,`${action}/${t}`);
+  for(const key of ['x','y','rotation','blink'])assert.equal(Math.abs(initial[key]),0,`${action}: ${key}`);
+  assert.equal(initial.scaleX,1);assert.equal(initial.scaleY,1);assert.equal(initial.frameMix,undefined);
+  for(const elapsed of [-1,NaN,Infinity]){
+   const p=sample(action,elapsed);for(const key of poseFields)assert.ok(Number.isFinite(p[key]));
+  }
  }
 });
 
-test('dense full-body frames preserve transparent safe margins and distinct drawings',async()=>{
- for(const name of ['idle','walk','eat','wave','jump','dance','sneak','sleep']){
-  const {data,info}=await sharp(path.join(__dirname,'../assets/whale',`dense-${name}.png`)).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-  assert.equal(info.width,2048);assert.equal(info.height,4096);
-  const hashes=new Set();
-  for(let f=0;f<32;f++){
-   const pixels=Buffer.alloc(512*512*4);let visible=0;
-   for(let y=0;y<512;y++)for(let x=0;x<512;x++){
-    const i=((Math.floor(f/4)*512+y)*info.width+f%4*512+x)*4,a=data[i+3];
-    data.copy(pixels,(y*512+x)*4,i,i+4);
-    if(a>200)visible++;
-    if(x<10||x>=502||y<10||y>=502)assert.equal(a,0,`${name}:${f} cropped`);
-    if(a>200)assert.ok(!(data[i]>180&&data[i]>data[i+1]+80&&data[i+2]>data[i+1]+80),`${name}:${f} magenta spill`);
-   }
-   assert.ok(visible>3000);hashes.add(require('node:crypto').createHash('sha256').update(pixels).digest('hex'));
-  }assert.equal(hashes.size,32,`${name}: duplicate drawings`);
+test('idle uses closed-eye frame 3 for brief irregular blinks in rendering and hit testing',()=>{
+ assert.equal(blinkFrame,3);let active=0;
+ for(let t=0;t<30000;t+=10){
+  const p=sample('idle',t);assert.equal(p.frame,0);assert.equal(p.atlas,'custom-idle');
+  assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);assert.ok(p.blink>=0&&p.blink<=1);
+  if(p.blink>0)active++;
  }
-});
-test('idle holds a stable body and blinks briefly at spaced intervals',()=>{
- let active=0;
- for(let t=0;t<30000;t+=10){const p=sample('idle',t);assert.equal(p.frame,0);assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);if(p.blink>0)active++;}
- assert.ok(active>40&&active<110,'Blinks occupy only a small fraction of idle time');
- assert.equal(sample('idle',3000).blink,0);assert.ok(sample('idle',5100).blink>.9);
-});
-test('short gestures settle instead of looping and thinking holds its pose',()=>{
- assert.equal(sample('dance',4000).atlas,'idle-front');
- assert.equal(sample('think',1000).frame,sample('think',9000).frame);
+ assert.ok(active>40&&active<110);assert.equal(blinkAt(3000),0);assert.ok(blinkAt(5100)>.9);
+ assert.equal(sample('idle',5100,true).blink,0);
+ const source=fs.readFileSync(path.join(__dirname,'../src/renderer/app.js'),'utf8');
+ assert.match(source,/needed=PetMotion\.requiredFrames\(name\)/);assert.ok(requiredFrames('custom-idle').includes(blinkFrame));
+ assert.match(source,/const frame=p\.blink>\.35\?PetMotion\.blinkFrame:p\.frame/);
+ assert.match(source,/const hitFrame=p\.blink>\.35\?PetMotion\.blinkFrame:/);
 });
 
-test('transitions preserve the outgoing transform then settle on one incoming sprite',()=>{
- const {transition}=require('../src/renderer/motion.js'),from=sample('jump',480),to=sample('idle',0);
+test('story interruption starts recovery on the current frame and ends on idle',()=>{
+ for(const action of ['hum','meal-break','token-game']){
+  const end=duration(clips[action]);
+  for(let t=0;t<end;t+=37){
+   const before=sample(action,t),recovery=recoveryClip(action,t);
+   assert.ok(recovery);assert.equal(recovery.frames[0],before.frame);assert.equal(recovery.atlas,before.atlas);
+   assert.equal(recovery.frames.length,recovery.times.length);
+   assert.ok(recovery.times.every(ms=>ms>0));assert.ok(duration(recovery)<=1800);
+   const first=sample('story-recover',0,false,recovery);
+   assert.equal(first.atlas,before.atlas);assert.equal(first.frame,before.frame);
+   assert.equal('entryFlow' in recovery,false);
+   for(let at=0;at<duration(recovery);at+=23){const p=sample('story-recover',at,false,recovery);assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);assert.equal('frameMix' in p,false);}
+   assert.deepEqual(sample('story-recover',duration(recovery),false,recovery),sample('idle',0));
+  }
+ }
+ assert.equal(recoveryClip('idle',100),null);assert.equal(recoveryClip('missing',100),null);
+});
+
+test('authored sleep and hand-release routes include every new drawing and end at canonical neutral',()=>{
+ assert.deepEqual(clips.sleep.frames,[0,1,8,9,3,10,11,12,4,5,6,7]);
+ assert.deepEqual(clips.wake.frames,[...clips.sleep.frames].reverse());
+ assert.ok(duration(clips.sleep)<2600);assert.ok(duration(clips.wake)<1600);
+ for(const action of ['wave','hungry']){
+  const c=clips[action];assert.deepEqual(c.frames.slice(-3),c.exitFrames);
+ }
+ assert.deepEqual(clips.think.exitFrames,[6,7,0]);assert.deepEqual(clips.surprise.exitFrames,[6,7,0]);
+ for(const c of Object.values(clips))for(const frame of [...(c.exitFrames||[]),...Object.values(c.exitRoutes||{}).flat()])assert.ok(requiredFrames(c.atlas).includes(frame));
+ assert.deepEqual(new Set(atlasNames),new Set([...Object.values(clips).map(c=>c.atlas),'custom-turn']));
+});
+
+test('the eighteen expression buttons resolve to their own semantic drawings',()=>{
+ const {Companion}=require('../src/main/behavior.cjs');
+ const source=fs.readFileSync(path.join(__dirname,'../src/renderer/companion.js'),'utf8');
+ const items=require('node:vm').runInNewContext(source.match(/const expressions=(\[.*\]);/)[1]);
+ const expected={pet:['happy','affection'],feed:['eat','eat'],dance:['dance','dance'],celebrate:['jump','jumping'],wave:['wave','waving'],peek:['peek','peek'],sneak:['sneak','sneak'],satisfied:['satisfied','satisfied'],review:['review','review'],shock:['shock','shock'],pout:['pout','pout'],sorry:['sorry','failed'],hum:['hum','hum'],'meal-break':['meal-break','rest'],'token-game':['token-game','token-game'],'tail-sway':['tail-sway','tail'],curl:['curl','curl'],stretch:['stretch','stretch']};
+ assert.equal(items.length,Object.keys(expected).length);
+ const seen=new Set();
+ for(const [label,event]of items){
+  const b=new Companion({now:()=>1000,random:()=>0});assert.equal(b.interact(event),true,label);
+  const [action,atlas]=expected[event];assert.equal(b.action,action,label);assert.equal(clips[action].atlas,'custom-'+atlas,label);seen.add(clips[action].atlas);
+ }
+ assert.equal(seen.size,items.length,'different expression labels must not alias the same atlas');
+});
+
+test('food release never replays a bite and early prop release does not start eating',()=>{
+ for(const [action,early,mouth,lower]of [['eat',[1,2],[3,4],[5,6,7]],['sneak',[1,2],[3],[4,5,6]],['token-game',[1,2,3],[4],[5]]]){
+  const c=clips[action];
+  for(const frame of early)assert.ok(exitFrames(c,frame).every(f=>!mouth.includes(f)),`${action}/${frame}: no new bite`);
+  for(const frame of lower)assert.ok(exitFrames(c,frame).every(f=>!mouth.includes(f)&&!early.includes(f)),`${action}/${frame}: no replay`);
+  for(const frame of new Set(c.frames)){
+   const route=exitFrames(c,frame);assert.equal(route[0],frame);assert.ok(isNeutral({atlas:c.atlas,frame:route.at(-1)}));
+  }
+ }
+});
+
+test('seated performances sit, rest, and fully stand without switching to the automatic sleep atlas',()=>{
+ for(const action of ['meal-break','curl']){
+  const c=clips[action];assert.notEqual(c.atlas,clips.sleep.atlas);
+  assert.deepEqual(c.frames,[0,1,3,4,5,4,3,1,0]);
+  assert.equal(duration(c),action==='meal-break'?3290:2980,'removing the deep squat must not change the performance duration');
+  assert.equal(requiredFrames(c.atlas).includes(2),false,'the low inherited squat must never be preloaded or displayed');
+  for(const frame of [1,3,4,5])assert.deepEqual(exitFrames(c,frame),[5,4,3,1,0].filter(f=>f<=frame));
+ }
+ for(const atlas of ['custom-rest','custom-curl','custom-stretch','custom-shock']){
+  assert.equal(isNeutral({atlas,frame:0}),true);
+  for(const frame of requiredFrames(atlas).filter(f=>f!==0))assert.equal(isNeutral({atlas,frame}),false);
+ }
+ assert.equal(isNeutral({atlas:'custom-jumping',frame:0}),false);assert.equal(isNeutral({atlas:'custom-jumping',frame:4}),true);
+ assert.equal(isNeutral({atlas:'custom-token-game',frame:6}),true);
+ assert.equal(isNeutral({atlas:'unregistered-atlas',frame:0}),false);
+});
+
+test('jump drawings supply the lift without an additional renderer y displacement',()=>{
+ for(let t=0;t<=duration(clips.jump)+100;t+=7)assert.equal(sample('jump',t).y,0);
+ assert.equal(sample('drag',1000).y,0);assert.equal(sample('fall',1000).y,0);
+ assert.equal(sample('drag',1000).frame,2);assert.equal(sample('fall',1000).frame,3);
+});
+
+test('transitions interpolate only rigid movement while preserving the incoming drawing and proportions',()=>{
+ const from={...sample('drag',0),x:12,y:-30,scaleX:.92,scaleY:1.08,rotation:.14},to=sample('idle',0);
  const start=transition(from,to,0),mid=transition(from,to,90),end=transition(from,to,180);
- assert.equal(start.y,from.y);assert.equal(start.atlas,to.atlas);assert.equal(mid.y,(from.y+to.y)/2);assert.deepEqual(end,to);
+ for(const key of ['x','y','rotation']){
+  assert.equal(start[key],from[key]);assert.equal(mid[key],(from[key]+to[key])/2);
+ }
+ assert.equal(start.atlas,to.atlas);assert.equal(start.frame,to.frame);assert.deepEqual(end,to);
+ for(const p of [start,mid,end]){assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);}
  for(const action of Object.keys(clips))for(const t of [0,16,90,179,180]){
-  const p=transition(from,sample(action,500),t);assert.ok(Number.isFinite(p.y)&&p.scaleX>0&&p.scaleY>0);
+  const p=transition(from,sample(action,500),t);assert.ok(Number.isFinite(p.y));assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);assert.equal('frameMix' in p,false);
  }
 });
 
-test('story originals have transparent margins and no magenta background in used frames',async()=>{
- for(const action of ['hum','meal-break','token-game','tail-sway']){
-  const c=clips[action],{data,info}=await sharp(path.join(__dirname,'../assets/whale',c.atlas+'.png')).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-  const cell=384;assert.equal(info.width,cell*4);assert.ok(new Set(c.frames).size>=(action==='tail-sway'?16:29));
-  for(const frame of c.frames){let visible=0,spill=0;
-   for(let y=0;y<cell;y++)for(let x=0;x<cell;x++){
-    const i=((Math.floor(frame/4)*cell+y)*info.width+frame%4*cell+x)*4,a=data[i+3];
-    if(a>200){visible++;if(data[i]>data[i+1]+80&&data[i+2]>data[i+1]+80&&data[i]>180)spill++;}
-    if(x<6||x>=cell-6||y<6||y>=cell-6)assert.equal(a,0,`${action}:${frame} clipped margin`);
-   }assert.ok(visible>10000);assert.equal(spill,0,`${action}:${frame} magenta remnants`);
-  }
- }
-});
-
-
-
-test('airborne displacement follows the actual jump stage and returns to the floor',()=>{
- const c=clips.jump,air=c.stages.find(s=>s.name==='airborne');
- assert.equal(sample('jump',air.start).y,0);
- assert.ok(sample('jump',(air.start+air.end)/2).y < -40);
- assert.ok(Math.abs(sample('jump',air.end).y)<1e-8);
- assert.equal(sample('jump',air.end+100).y,0);
- for(let t=0;t<air.start;t+=10)assert.equal(sample('jump',t).y,0);
-});
-test('sleep never reopens eyes after the close-eyes phase and recovery is monotonic',()=>{
- const c=clips.sleep,start=c.stages.find(s=>s.name==='close-eyes').start;
- for(let t=start;t<6000;t+=10){const p=sample('sleep',t);assert.ok([21,23,25,27,29,31,41,42].includes(p.frame));}
- const wave=clips.wave;
- assert.ok(wave.frames.every(f=>f%2===1),'do not alternate incompatible drawing batches');
- for(const action of ['sleep','eat','wave','jump']){
-  const stages=clips[action].stages;for(let i=1;i<stages.length;i++)assert.equal(stages[i].start,stages[i-1].end);
- }
-});
-
-test('selected inbetweens and registered keys fit their atlases and revised timelines',async()=>{
- const expected={right:{count:0,duration:960},jump:{count:6,duration:1195},sleep:{count:4,duration:2410}};
- for(const [name,rule]of Object.entries(expected)){
-  const c=clips[name],added=c.frames.filter(f=>f>=32);assert.equal(new Set(added).size,rule.count);
-  assert.equal(c.times.reduce((a,b)=>a+b,0),rule.duration);
-  const {data,info}=await sharp(path.join(__dirname,'../assets/whale',c.atlas+'.png')).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-  for(const f of c.frames){let visible=0;
-   for(let y=0;y<512;y++)for(let x=0;x<512;x++){
-    const i=((Math.floor(f/4)*512+y)*info.width+f%4*512+x)*4,a=data[i+3];
-    if(x<10||x>=502||y<10||y>=502)assert.equal(a,0,`${name}:${f} clipping`);
-    if(a>200){visible++;assert.ok(!(data[i]>180&&data[i]>data[i+1]+80&&data[i+2]>data[i+1]+80),`${name}:${f} magenta`);}
-   }assert.ok(visible>3000);
-  }
- }
- const air=clips.jump.stages.find(s=>s.name==='airborne');assert.equal(air.start,240);assert.equal(air.end,720);
-});
-test('jump inbetweens remain visible and physical stages end on pose boundaries',()=>{
- for(const name of ['jump','land']){
-  const c=clips[name];let at=0;const boundaries=new Set([0]);
-  for(const ms of c.times){assert.ok(ms>=40,'no one-refresh flash poses');at+=ms;boundaries.add(at);}
-  for(const s of c.stages){assert.ok(boundaries.has(s.start));assert.ok(boundaries.has(s.end));assert.ok(s.end>s.start);}
-  assert.equal(c.stages.at(-1).end,at);
+test('runtime retains pointer-independent animation behavior',()=>{
+ for(const file of ['src/renderer/app.js','src/preload.cjs','src/main/main.cjs']){
+  const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');assert.doesNotMatch(source,/lookIndex|pointerVector|onPointer|gaze\.png/);
  }
 });

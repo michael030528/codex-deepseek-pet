@@ -13,6 +13,53 @@ test('request only includes bounded user history and explicit image, returns act
  assert.equal(answer,'我想明白了。');assert.equal(received.messages[0].role,'system');assert.equal(received.messages.at(-1).content[1].type,'image_url');assert.equal(received.stream,false);assert.equal(received.max_tokens,1200);
  }finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
+test('official DeepSeek V4 requests disable thinking without changing the selected model or chat limits',async()=>{
+ for(const [baseUrl,model,onDelta] of [
+  ['https://api.deepseek.com',' deepseek-v4-pro ',undefined],
+  ['https://api.deepseek.com/v1/','deepseek-v4-flash',()=>{}],
+ ]){
+  let request,requestUrl,requests=0;
+  const answer=await complete({baseUrl,model,messages:[{role:'user',content:'你好'}],onDelta,fetchImpl:async(url,options)=>{
+   requests++;requestUrl=url;request=JSON.parse(options.body);
+   return new Response(JSON.stringify({choices:[{message:{content:'你好。'}}]}));
+  }});
+  assert.equal(requests,1);assert.equal(answer,'你好。');
+  assert.equal(requestUrl,baseUrl==='https://api.deepseek.com'?'https://api.deepseek.com/chat/completions':'https://api.deepseek.com/v1/chat/completions');
+  assert.equal(request.model,model.trim());assert.deepEqual(request.thinking,{type:'disabled'});
+  assert.equal(request.max_tokens,1200);assert.equal(request.stream,Boolean(onDelta));
+  assert.deepEqual(request.messages.at(-1),{role:'user',content:'你好'});
+ }
+});
+test('DeepSeek V4 options and image restrictions do not affect other providers or model names',async()=>{
+ const image='data:image/png;base64,AA==';
+ for(const [baseUrl,model] of [
+  ['https://example.com/v1','deepseek-v4-pro'],
+  ['https://api.deepseek.com.example.com','deepseek-v4-flash'],
+  ['http://127.0.0.1:1234','deepseek-v4-pro'],
+  ['https://api.deepseek.com','deepseek-flash'],
+  ['https://api.deepseek.com','deepseek-v4-pro-custom'],
+ ]){
+  let request,requests=0;
+  const answer=await complete({baseUrl,model,messages:[{role:'user',content:'看看这张图'}],image,fetchImpl:async(_url,options)=>{
+   requests++;request=JSON.parse(options.body);
+   return new Response(JSON.stringify({choices:[{message:{content:'收到图片。'}}]}));
+  }});
+  assert.equal(requests,1);assert.equal(answer,'收到图片。');assert.equal(request.model,model);
+  assert.equal(Object.hasOwn(request,'thinking'),false);
+  assert.deepEqual(request.messages.at(-1).content,[{type:'text',text:'看看这张图'},{type:'image_url',image_url:{url:image}}]);
+ }
+});
+test('official DeepSeek V4 rejects explicit images before sending any request',async()=>{
+ for(const model of ['deepseek-v4-pro',' deepseek-v4-flash ']){
+  for(const messages of [[],[{role:'user',content:'看看这张图'}]]){
+   let requests=0;
+   await assert.rejects(()=>complete({baseUrl:'https://api.deepseek.com/v1',model,messages,image:'data:image/png;base64,AA==',fetchImpl:async()=>{
+    requests++;return new Response(JSON.stringify({choices:[{message:{content:'不应发送'}}]}));
+   }}),/仅支持文字.*取消附加截图/);
+   assert.equal(requests,0);
+  }
+ }
+});
 test('provider errors do not expose response body',async()=>{await assert.rejects(()=>complete({baseUrl:'https://example.com',model:'test',messages:[],fetchImpl:async()=>new Response('secret-provider-body',{status:401})}),e=>!e.message.includes('secret')&&e.message.includes('密钥'));});
 test('cancellation stops request',async()=>{const controller=new AbortController();controller.abort();await assert.rejects(()=>complete({baseUrl:'http://127.0.0.1:1234',model:'test',messages:[],signal:controller.signal}),e=>e.name==='AbortError');});
 test('malformed successful response and empty choices are rejected',async()=>{

@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('petApi', {
   onState: cb => subscribe('pet:state', cb), onHitPoint: cb => subscribe('pet:hit-point', cb),
   onKinetics: cb => subscribe('pet:kinetics', cb),
   onWalkOffset: cb => subscribe('pet:walk-offset', cb),
+  visualSchedule: value => ipcRenderer.send('pet:visual-schedule', value),
   onChatDelta: cb => subscribe('companion:delta', cb),
   onSettings: cb => subscribe('pet:settings', cb), onNotice: cb => subscribe('pet:notice', cb),
   interact: kind => ipcRenderer.send('pet:interact', kind),

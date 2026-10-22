@@ -1,68 +1,27 @@
-name: Release Windows installer
+name: Build modified Windows edition
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: windows-latest
     timeout-minutes: 30
-
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run checks
-        run: npm run check
-
-      - name: Run tests
-        run: npm test
-
-      - name: Build Windows installer
-        run: npx electron-builder --win nsis --publish never
-
-      - name: Create GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_REF_NAME: ${{ github.ref_name }}
-          RELEASE_REF_TYPE: ${{ github.ref_type }}
-        run: |
-          $asset = Get-ChildItem -LiteralPath artifacts -Filter "codex-deepseek-pet-Setup-*-x64.exe" |
-            Select-Object -First 1
-          if (-not $asset) {
-            throw "Windows installer was not generated."
-          }
-
-          $package = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
-          $releaseTag = if ($env:RELEASE_REF_TYPE -eq "tag") {
-            $env:RELEASE_REF_NAME
-          } else {
-            "v$($package.version)"
-          }
-
-          gh release view $releaseTag --json tagName *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $releaseTag $asset.FullName --clobber
-          } else {
-            gh release create $releaseTag $asset.FullName `
-              --verify-tag `
-              --title "codex-deepseek-pet $releaseTag" `
-              --generate-notes `
-              --latest
-          }
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:electron
+      - run: npm run dist -- --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: modified-windows-build
+          path: artifacts/*.exe

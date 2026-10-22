@@ -1,0 +1,19 @@
+Use case: identity-preserve.
+Asset type: polished full-color transparent desktop-pet sprite atlas, eight complete independently drawn animation frames.
+Input 1 is the ONLY character identity and drawing-style reference: preserve her exact round chibi head, large blue eyes, cobalt-to-sky-blue hair, maid headband, navy gold-trimmed dress, white apron with whale emblem, white socks, navy shoes and blue whale tail. Preserve the extremely short legs and large head/body ratio. Input 2 is a pose-timing diagram ONLY; transfer the leg phases, never its drawing, labels, linework or colors.
+
+Create a gentle, small-step LEFTWARD WALK cycle, facing screen LEFT throughout. Exactly 4 equal columns by 2 equal rows, read left to right, top then bottom. All eight cells show the whole SAME character at SAME scale and side-profile camera, with generous transparent margins and a fixed ground level. The near eye and far eye foreshortening stay identical. Keep the forehead, cheek, chin, head width and hair silhouette consistent. The knees remain BELOW the skirt, feet remain near the floor. Legs are short like the first reference. This is a quiet natural stroll: no running, no high knees, no butt kicks, no leaps, no long strides.
+
+CRITICAL animation mechanics: there are TWO anatomically distinct legs. NEAR is the leg nearest the viewer; FAR is the other leg behind it. The SAME NEAR leg passes gradually from forward to vertical to backward in frames 0,1,2,3. In frames 4,5,6,7 it is the SAME FAR leg that passes gradually from forward to vertical to backward. The foreground/background order of the visible socks and shoes must prove the legs switch roles between rows. The torso and skirt remain compact, stable, and upright.
+
+Per cell:
+0 upper-left: NEAR foot on floor a short distance in front (screen LEFT) of hip; FAR toe behind (screen RIGHT) on floor.
+1 upper second: NEAR planted foot midway toward hip, FAR trailing foot just lifted with only a tiny knee bend.
+2 upper third: NEAR planted foot directly under hip, FAR swinging foot passing close behind near ankle just above floor.
+3 upper-right: NEAR planted foot a short distance behind hip (screen RIGHT); FAR foot swings ahead (screen LEFT), hovering low and preparing to land.
+4 lower-left: FAR foot now lands ahead (screen LEFT); NEAR toe behind (screen RIGHT). Same stride length as 0 but OPPOSITE leg leads. This pose must NOT copy cell 0's foreground leg.
+5 lower second: FAR planted foot midway toward hip; NEAR foot just lifted behind, tiny knee bend.
+6 lower third: FAR planted foot directly under hip; NEAR foot passes IN FRONT of far ankle, only just above floor.
+7 lower-right: FAR planted foot behind hip; NEAR foot low ahead preparing to land into cell 0.
+
+Pose 7 to 0 closes smoothly. Shoes move incrementally across the phases rather than returning to a wide split every other frame. The two rows are opposite-foot phases, not duplicated poses. The legs must not grow longer when moving. At least one sole touches the same ground level in every cell. Soft minimal arm counter-swing, modest hair and tail secondary motion. Render all anatomy, clothing and linework as coherent original full-character art. No speed lines, ground shadow, gridlines, words, frame numbers, guides, tinted legs or colored skeletal marks. True transparent alpha background. Output image wide 2:1, ideally 2048x1024.

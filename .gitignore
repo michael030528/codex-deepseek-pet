@@ -19,3 +19,23 @@ docs/visual-walk-contact.png
 # Local editor settings
 .idea/
 .vscode/
+
+# Local companion data and credentials must never be published
+settings.json
+settings.json.tmp
+credential.bin
+credential.bin.tmp
+history.json
+chat-history.json
+session.json
+user-data/
+userdata/
+User Data/
+Local Storage/
+Session Storage/
+IndexedDB/
+Cache/
+Code Cache/
+GPUCache/
+Crashpad/
+logs/

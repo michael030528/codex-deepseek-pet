@@ -28,8 +28,7 @@ test('missing window falls to desktop floor with negative monitor coordinates',(
  let b={x:-1200,y:300,vx:0,vy:0};for(let n=0;n<100&&!b.landed;n++)b=advance(b,.04,s,a,size);
  assert.equal(b.landed.handle,'floor');assert.equal(b.y+footOffset(size),1080);
 });
-test('landing squashes then rebounds and dampens without moving foot anchor',()=>{
- const a=sample('land',0),b=sample('land',150),c=sample('land',800);
- assert.ok(a.scaleX>1.1&&a.scaleY<.9);assert.ok(b.scaleY>1);assert.ok(Math.abs(c.scaleY-1)<.015);
- assert.equal(a.y,0);assert.equal(b.y,0);
+test('landing uses the authored compression and recovery without stretching the face or moving its anchor',()=>{
+ for(let t=0;t<=800;t+=13){const p=sample('land',t);assert.equal(p.scaleX,1);assert.equal(p.scaleY,1);assert.equal(p.y,0);}
+ assert.equal(sample('land',0).frame,3);assert.equal(sample('land',150).frame,4);assert.equal(sample('land',800).atlas,'custom-idle');
 });

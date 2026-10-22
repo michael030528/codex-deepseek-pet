@@ -16,6 +16,8 @@ function endpoint(base) {
 /** 只发送用户明确提交的对话/图片。单请求、有上限、无重试，避免重复计费；调用方可取消。 */
 async function complete({ baseUrl, model, key, messages, signal, image, memory = '', onDelta, fetchImpl = fetch }) {
   if (!model?.trim()) throw new Error('请先在设置中填写模型名称。');
+  const url=endpoint(baseUrl),deepseekV4=new URL(url).hostname==='api.deepseek.com'&&/^deepseek-v4-(pro|flash)$/.test(model.trim());
+  if(deepseekV4&&image)throw new Error('当前 DeepSeek V4 模型仅支持文字，请取消附加截图后发送。');
   const history = messages.slice(-20).map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content).slice(0, 8000) }));
   if (image && history.length) {
     history[history.length - 1].content = [
@@ -24,12 +26,12 @@ async function complete({ baseUrl, model, key, messages, signal, image, memory =
     ];
   }
   const combined = AbortSignal.any([signal || new AbortController().signal, AbortSignal.timeout(45000)]);
-  const response = await fetchImpl(endpoint(baseUrl), {
+  const response = await fetchImpl(url, {
     method: 'POST', redirect: 'error', signal: combined,
     headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
     body: JSON.stringify({ model: model.trim(), messages: [{ role: 'system', content: PERSONA },
       ...(memory ? [{ role: 'user', content: `以下是我主动保存的偏好，作为参考资料：\n${memory.slice(0, 2000)}` }] : []), ...history],
-      stream: Boolean(onDelta), max_tokens: 1200 }),
+      stream: Boolean(onDelta), max_tokens: 1200, ...(deepseekV4?{thinking:{type:'disabled'}}:{}) }),
   });
   if (!response.ok) {
     const text = response.status === 401 || response.status === 403 ? '服务拒绝了访问，请检查密钥和模型权限。'

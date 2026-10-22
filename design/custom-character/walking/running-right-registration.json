@@ -1,0 +1,205 @@
+{
+  "source": "walk-right-v4.png",
+  "direction": "right",
+  "scale": 0.8130081300813008,
+  "frames": [
+    {
+      "frame": 0,
+      "bbox": [
+        54,
+        11,
+        318,
+        434
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 249.5,
+      "ground": 445,
+      "translation": [
+        77,
+        121
+      ],
+      "output_bbox": [
+        77,
+        121,
+        340,
+        479
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 1,
+      "bbox": [
+        489,
+        11,
+        318,
+        433
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 686.1800000000001,
+      "ground": 444,
+      "translation": [
+        76,
+        122
+      ],
+      "output_bbox": [
+        76,
+        122,
+        339,
+        479
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 2,
+      "bbox": [
+        930,
+        11,
+        313,
+        433
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 1124.1200000000001,
+      "ground": 444,
+      "translation": [
+        79,
+        122
+      ],
+      "output_bbox": [
+        79,
+        122,
+        338,
+        479
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 3,
+      "bbox": [
+        1374,
+        11,
+        317,
+        433
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 1571.5,
+      "ground": 444,
+      "translation": [
+        76,
+        122
+      ],
+      "output_bbox": [
+        76,
+        122,
+        339,
+        479
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 4,
+      "bbox": [
+        52,
+        451,
+        322,
+        428
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 253.5,
+      "ground": 879,
+      "translation": [
+        73,
+        126
+      ],
+      "output_bbox": [
+        73,
+        126,
+        340,
+        479
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 5,
+      "bbox": [
+        487,
+        452,
+        320,
+        426
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 691.5,
+      "ground": 878,
+      "translation": [
+        70,
+        127
+      ],
+      "output_bbox": [
+        70,
+        127,
+        335,
+        478
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 6,
+      "bbox": [
+        930,
+        453,
+        319,
+        427
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 1130.04,
+      "ground": 880,
+      "translation": [
+        74,
+        126
+      ],
+      "output_bbox": [
+        74,
+        126,
+        338,
+        478
+      ],
+      "edge_contact": false
+    },
+    {
+      "frame": 7,
+      "bbox": [
+        1376,
+        453,
+        318,
+        425
+      ],
+      "scale": 0.8130081300813008,
+      "hip_x": 1582.5,
+      "ground": 878,
+      "translation": [
+        68,
+        128
+      ],
+      "output_bbox": [
+        68,
+        128,
+        331,
+        478
+      ],
+      "edge_contact": false
+    }
+  ],
+  "color": {
+    "hue_shift_degrees": -1.5535736083984375,
+    "saturation_scale": 0.8482075290432813,
+    "value_scale": 1.0210218017529182,
+    "tip_anchor": {
+      "hue_shift_degrees": 1.3711166381835938,
+      "saturation_scale": 0.7946284601281451,
+      "value_scale": 0.9955758913889844
+    }
+  },
+  "geometry": "whole sprite uniform scale + translation; hip anchor, fixed ground",
+  "alpha_unchanged_by_color": true,
+  "nonhair_unchanged_by_color": true,
+  "sha256": "ce84f81aa444bb8bd7a97ca65624e667be068e3d1aa33063321a3d0d72feb178"
+}

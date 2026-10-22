@@ -30,3 +30,11 @@
 `assets/fonts/` 中 Noto Serif SC 字体使用 SIL Open Font License，完整许可见 [OFL.txt](assets/fonts/OFL.txt)。第三方代码和依赖保持其各自许可，使用时应一并遵守相应声明。
 
 本次许可调整不撤销此前版本已经授予的 MIT 等许可权利。
+
+## 统一形象修改版的新增素材
+
+`3.1.0-codex.1` 由 michael030528 维护，修改版仓库为 <https://github.com/michael030528/codex-deepseek-pet>。原项目作者仍为 YunYueSama，原仓库为 <https://github.com/YunYueSama/codex-deepseek-pet>；本修改版不代表原作者或 DeepSeek 官方发布、认可或代言。
+
+本轮新增与重绘的 `assets/whale/custom-*.png` 采用同一标准角色作参考，由内置 ImageGen 生成完整姿势，再作整图等比注册和选定头发区域的颜色校准。原始图像、精确提示词及处理记录见 [design/custom-character](design/custom-character/)，实际改动见 [修改版说明](docs/修改版说明.md)。
+
+本节仅补充修改来源，不改变上文及完整 `LICENSE` 的许可条件，不授予底层社区参考作品、角色设计、商标、字体或第三方依赖的额外权利。分发本修改版仍须保留原作者署名、原仓库地址、完整许可及经过修改的说明。

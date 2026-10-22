@@ -1,0 +1,205 @@
+{
+  "date": "2026-10-22",
+  "version": "3.1.0-codex.1",
+  "unitTests": {
+    "tests": 123,
+    "pass": 123,
+    "fail": 0
+  },
+  "integration": {
+    "passed": true,
+    "pixelExactComparisons": 232,
+    "usedSprites": 142,
+    "atlasCount": 25
+  },
+  "packagedSmoke": {
+    "assetsReady": true,
+    "renderMode": "authored-frames",
+    "spriteCount": 142
+  },
+  "walking": {
+    "method": "Actual native movement + transparent renderer canvas captures; isolated userData, no personal API settings.",
+    "gait": {
+      "leftStrideSourcePx": 252,
+      "rightStrideSourcePx": 255,
+      "cellPx": 512,
+      "canvasPxAt100Percent": 300,
+      "speedPxPerSecondAt100Percent": 150,
+      "leftSettle": [
+        2,
+        6
+      ],
+      "rightSettle": [
+        1,
+        5
+      ]
+    },
+    "runs": [
+      {
+        "scale": 1,
+        "direction": "right",
+        "distance": 320,
+        "terminal": {
+          "elapsed": 1884.6954248366,
+          "offset": 0,
+          "ended": true
+        },
+        "settled": {
+          "action": "idle",
+          "atlas": "custom-idle",
+          "frame": 0
+        },
+        "sequence": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1
+        ],
+        "captureCount": 75
+      },
+      {
+        "scale": 1,
+        "direction": "left",
+        "distance": -320,
+        "terminal": {
+          "elapsed": 1907.1322751322728,
+          "offset": 0,
+          "ended": true
+        },
+        "settled": {
+          "action": "idle",
+          "atlas": "custom-idle",
+          "frame": 0
+        },
+        "sequence": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1
+        ],
+        "captureCount": 75
+      },
+      {
+        "scale": 0.5,
+        "direction": "right",
+        "distance": 160,
+        "terminal": {
+          "elapsed": 1884.6954248366008,
+          "offset": 0,
+          "ended": true
+        },
+        "settled": {
+          "action": "idle",
+          "atlas": "custom-idle",
+          "frame": 0
+        },
+        "sequence": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1
+        ],
+        "captureCount": 0
+      },
+      {
+        "scale": 0.5,
+        "direction": "left",
+        "distance": -160,
+        "terminal": {
+          "elapsed": 1907.1322751322728,
+          "offset": 0,
+          "ended": true
+        },
+        "settled": {
+          "action": "idle",
+          "atlas": "custom-idle",
+          "frame": 0
+        },
+        "sequence": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          0,
+          1
+        ],
+        "captureCount": 0
+      }
+    ],
+    "resizeThenReversePassed": true,
+    "retiredStartupFrames": [
+      9,
+      11
+    ],
+    "allDirectionsCompleted": true
+  },
+  "expressionValidation": {
+    "scope": "Prior 18-button / 18-adjacent-interruption validation; expression PNG assets unchanged in this running update.",
+    "report": "custom-gallery-validation.json",
+    "buttons": 18,
+    "adjacentInterruptions": 18
+  },
+  "rendering": {
+    "wholeAuthoredSprites": true,
+    "opticalFlow": false,
+    "crossFade": false,
+    "bodyStretch": false,
+    "positionUpdateTargetHz": 60,
+    "uniquePoseRateNote": "Eight authored frames per walk cycle, not 60 unique drawings per second."
+  },
+  "appAsarSha256": "a42730403fd1b8cbbab82542759fd784ee0c9720e4fb9011fe26811909ac98b9"
+}

@@ -4,6 +4,8 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { atlasNames, requiredFrames } = require('../src/renderer/motion.js');
+const expectedSpriteCount = atlasNames.reduce((count, atlas) => count + requiredFrames(atlas).length, 0);
 
 const packagedPath = process.env.PET_SMOKE_EXE;
 const electronPath = packagedPath || require('electron');
@@ -61,7 +63,7 @@ child.on('exit', (code, signal) => {
 
     const size = readPngSize(capturePath);
     const receipt = JSON.parse(fs.readFileSync(capturePath + '.json', 'utf8'));
-    if (!receipt.assetsReady || receipt.spriteCount < 200) throw new Error('Sprite preload did not complete.');
+    if (!receipt.assetsReady || receipt.spriteCount !== expectedSpriteCount) throw new Error(`Sprite preload did not complete: expected ${expectedSpriteCount}, received ${receipt.spriteCount}.`);
     if (process.env.PET_SMOKE_REQUIRE_FLOW === '1' && !receipt.flowReady) throw new Error('Motion interpolation is unavailable.');
     if (size.width < 200 || size.height < 250) {
       throw new Error(`Electron smoke capture is unexpectedly small: ${size.width}x${size.height}.`);

@@ -70,3 +70,74 @@ test('story recovery cannot interrupt dragging or chatting and repeated pet does
  advance(50);brain.interact('pet');assert.equal(brain.started,started);
  brain.interact('drag');assert.equal(brain.interact('token-game'),false);
 });
+
+test('leaving a sleep pose cannot wander before the authored wake duration, even if action lock is cleared',()=>{
+ const wakeDuration=require('../src/renderer/motion.js').clips.wake.times.reduce((a,b)=>a+b,0);
+ for(const sleep of ['sleep'])for(const next of ['mode','idle','wave']){
+  const {brain,advance}=setup();brain.play(sleep,'',60000,20);advance(3000);
+  if(next==='mode')brain.setMode('company');else brain.play(next,'',0,80);
+  // Main event handlers may release the state lock; visual recovery must retain its own deadline.
+  brain.until=0;assert.equal(brain.canWander(),false,`${sleep} -> ${next}`);
+  advance(wakeDuration-1);assert.equal(brain.canWander(),false);
+  advance(1);assert.equal(brain.canWander(),true);
+ }
+});
+
+test('curl and pre-meal nap finish standing and never invoke the automatic sleep wake sequence',()=>{
+ const {clips}=require('../src/renderer/motion.js');
+ for(const action of ['curl','meal-break']){
+  const {brain,advance}=setup();brain.interact(action);
+  const duration=clips[action].times.reduce((a,b)=>a+b,0);assert.equal(brain.until-brain.started,duration);
+  advance(duration);brain.tick();assert.equal(brain.action,'idle');
+ }
+});
+
+test('interrupting seated actions reserves enough time to stand before wandering',()=>{
+ const {recoveryDelay}=require('../src/renderer/motion.js');
+ for(const action of ['curl','meal-break'])for(const next of ['mode','idle','wave']){
+  const {brain,advance}=setup();brain.interact(action);advance(1800);
+  const delay=recoveryDelay(action,1800);assert.ok(delay>=500);
+  if(next==='mode')brain.setMode('company');else brain.play(next,'',0,80);
+  brain.until=0;assert.equal(brain.canWander(),false);
+  advance(delay-1);assert.equal(brain.canWander(),false);advance(1);assert.equal(brain.canWander(),true);
+ }
+});
+
+test('interrupting a pre-meal nap uses a waking response',()=>{
+ const {brain,advance}=setup();brain.interact('meal-break');advance(1800);brain.interact('pet');
+ assert.equal(brain.action,'story-recover');assert.equal(brain.recovery.atlas,'custom-rest');
+ assert.match(brain.message,/起来|眯/);assert.doesNotMatch(brain.message,/吃一口/);
+});
+
+test('interrupting an in-progress wake preserves its remaining deadline without extending it',()=>{
+ const wakeDuration=require('../src/renderer/motion.js').clips.wake.times.reduce((a,b)=>a+b,0);
+ const {brain,advance}=setup();brain.play('sleep','',60000,20);brain.play('wake','',0,50);
+ const wakeStarted=brain.started;advance(400);brain.play('idle','',0,60);
+ assert.equal(brain.wanderAfter,wakeStarted+wakeDuration);assert.equal(brain.canWander(),false);
+ advance(wakeDuration-400);assert.equal(brain.canWander(),true);
+});
+
+test('sleep recovery never delays physical drag, fall or land events and ordinary idle can wander immediately',()=>{
+ for(const action of ['drag','fall','land']){
+  const {brain}=setup();brain.play('sleep','',60000,20);
+  assert.equal(brain.play(action,'',1000,100),true);assert.equal(brain.action,action);assert.equal(brain.started,brain.now());
+  assert.equal(brain.wanderAfter,0);
+ }
+ const {brain}=setup();brain.play('idle','',0,0);assert.equal(brain.canWander(),true);
+});
+
+test('visual schedule extensions are bounded and accept only the current action instance',()=>{
+ const {brain,advance}=setup();brain.interact('curl');
+ const original={action:brain.action,started:brain.started,until:brain.until};
+ for(const value of [null,{...original,until:NaN},{...original,action:'eat',until:original.until+100},{...original,started:original.started-1,until:original.until+100},{...original,until:original.until+2001}])assert.equal(brain.reserveVisual(value),false);
+ assert.equal(brain.reserveVisual({...original,until:original.until+1250}),true);assert.equal(brain.until,original.until+1250);
+ assert.equal(brain.reserveVisual({...original,until:original.until+2200}),false,'repeated messages cannot move the bound');
+ advance(10);brain.interact('wave');assert.equal(brain.reserveVisual({...original,until:original.until+1500}),false,'stale acknowledgements cannot lock the new action');
+ brain.interact('drag');assert.equal(brain.reserveVisual({action:brain.action,started:brain.started,until:brain.until+100}),false);
+});
+
+test('visual reports cannot reopen an explicitly released chat or action deadline',()=>{
+ const {brain}=setup();brain.play('think','',60000,90);
+ const report={action:brain.action,started:brain.started,until:brain.until+300};
+ brain.until=0;assert.equal(brain.reserveVisual(report),false);brain.tick();assert.equal(brain.action,'idle');
+});

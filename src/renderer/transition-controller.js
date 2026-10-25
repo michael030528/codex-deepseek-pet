@@ -5,6 +5,9 @@
  const urgent=new Set(['drag','fall','land']);
  const key=s=>`${s.action}:${s.started}`;
  const dedupe=frames=>frames.filter((frame,i)=>!i||frame!==frames[i-1]);
+ // The rig uses 1-smoothstep(recovery). Its inverse keeps a partly opened
+ // starting pose unchanged when it becomes a release pose.
+ const walkReleaseStart=p=>p.walkRecovery??(.5-Math.sin(Math.asin(2*Math.max(0,Math.min(1,p.walkBlend??1))-1)/3));
  class Controller{
   constructor(motion){this.motion=motion;this.source=null;this.active=null;this.bridge=null;this.pending=null;this.lastPose=null;}
   activate(state,now,native=false){this.active={...state,sourceStarted:state.started,requestedDuration:Math.max(0,state.until-state.started),started:native?state.started:now};this.bridge=null;this.pending=null;}
@@ -29,27 +32,39 @@
   }
   route(p,active){
    const m=this.motion,idle=m.sample('idle',0,true),c=active.action==='story-recover'&&active.recovery||m.clips[active.action];
+   // 再次打断恢复时继承已释放比例，避免腰部突然弹回最初弯曲量。
+   if(p?.stretchTime!==undefined&&!m.isNeutral(p))return [{pose:{...p,stretchReleaseFrom:p.stretchReleaseFrom??p.stretchTime,stretchRecoveryStart:p.stretchRecovery??0,stretchRecovery:p.stretchRecovery??0},ms:280*(1-(p.stretchRecovery??0))},{pose:idle,ms:40}];
    if(!p||m.isNeutral(p))return [];
-   if(['left','right'].includes(active.action)){
-    const stop=m.clips['stop-'+active.action],turn=m.turnFrames[active.action],result=[];
+   // A stop bridge can still display a gait or turn from the outgoing side.
+   // Route from that visible drawing even when the new logical action has changed.
+   const visibleDirection=['left','right'].find(direction=>p.atlas===m.clips[direction].atlas||p.atlas==='custom-turn'&&m.turnFrames[direction].includes(p.frame));
+   if(visibleDirection||moving.has(active.action)){
+    const direction=visibleDirection||active.action,gaitClip=m.clips[direction];
+    const stop=m.clips['stop-'+direction],turn=m.turnFrames[direction],result=[];
     let frames=stop.frames;
     if(p.atlas===stop.atlas){
      // A cancelled startup only reverses the turn already shown.
      const at=turn.indexOf(p.frame);frames=at>=0?turn.slice(0,at+1).reverse():stop.frames;
-    }else if(p.atlas===c.atlas){
+    }else if(p.atlas===gaitClip.atlas){
      // Finish the visible leg's support phase before gathering both feet.
      // Each direction has its own compact support poses in the approved art.
      // Advancing in cycle order avoids a cut to the unrelated launch pose (turn 9/11).
-     let at=c.frames.indexOf(p.frame),count=0;
-     if(at<0)at=0;
-     do{
-      const frame=c.frames[at];
-      result.push({pose:{...idle,atlas:c.atlas,frame,blink:0},ms:80+count*20});count++;
-      if(m.gait.settleFrames[active.action].includes(frame))break;
-      at=(at+1)%c.frames.length;
-     }while(count<c.frames.length);
+     if(p.walkRecovery===undefined){
+      let at=gaitClip.frames.indexOf(p.frame),count=0;
+      if(at<0)at=0;
+      do{
+       const frame=gaitClip.frames[at];
+       result.push({pose:{...idle,atlas:gaitClip.atlas,frame,blink:0,...(p.walkBlend!==undefined?{walkBlend:p.walkBlend}:{})},ms:55+count*10});count++;
+       if(m.gait.settleFrames[direction].includes(frame))break;
+       at=(at+1)%gaitClip.frames.length;
+      }while(count<gaitClip.frames.length);
+     }
+     // A second interruption continues the visible release instead of opening
+     // the feet again or replaying support steps that already finished.
+     const releaseStart=walkReleaseStart(p),releasePose=result.at(-1)?.pose||p;
+     result.push({pose:{...releasePose,walking:false,blink:0,walkRecoveryStart:releaseStart,walkRecovery:releaseStart},ms:160*(1-releaseStart)});
     }else result.push({pose:{...p,walking:false,blink:0},ms:40});
-    result.push(...dedupe(frames).map(frame=>({pose:{...idle,atlas:stop.atlas,frame,blink:0},ms:80})),{pose:idle,ms:50});
+    result.push(...dedupe(frames).map(frame=>({pose:{...idle,atlas:stop.atlas,frame,blink:0},ms:stop.times[stop.frames.indexOf(frame)]??80})),{pose:idle,ms:50});
     return result;
    }
    let frames,atlas=p.atlas,sleeping=atlas===m.clips.sleep?.atlas;
@@ -125,7 +140,7 @@
    if(this.bridge){
     let elapsed=Math.max(0,now-this.bridge.started);
     if(elapsed<this.bridge.duration){
-     for(const step of this.bridge.route){if(elapsed<step.ms){pose={...step.pose};break;}elapsed-=step.ms;}
+     for(const step of this.bridge.route){if(elapsed<step.ms){pose={...step.pose};if(pose.walkRecovery!==undefined){const start=pose.walkRecoveryStart??0;pose.walkRecovery=start+(1-start)*elapsed/step.ms;}if(pose.stretchReleaseFrom!==undefined){const start=pose.stretchRecoveryStart??0;pose.stretchRecovery=start+(1-start)*elapsed/step.ms;}break;}elapsed-=step.ms;}
      action='transition-recover';
     }else{
      const at=this.bridge.started+this.bridge.duration,pending=this.pending,native=this.bridge.resumeNative&&moving.has(pending.action);

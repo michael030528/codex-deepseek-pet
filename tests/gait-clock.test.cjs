@@ -58,15 +58,20 @@ test('terminal packets retain the final distance phase during the native state d
 });
 
 test('each left and right stop starts on the visible gait pose then finishes support before gathering feet',()=>{
- for(const direction of ['left','right'])for(let frame=0;frame<8;frame++){
-  const c=new Controller(Motion),walk=state(direction),at=3000,elapsed=frame*110+20;
+ for(const direction of ['left','right'])for(let phase=0;phase<8;phase++){
+  const clip=Motion.clips[direction],frame=clip.frames[phase];
+  const c=new Controller(Motion),walk=state(direction),at=3000,elapsed=clip.times.slice(0,phase).reduce((sum,ms)=>sum+ms,0)+20;
   const before=c.sample(walk,at,{walkElapsed:elapsed}).pose;
   const stop=state('stop-'+direction,at);assert.equal(drawing(c.sample(stop,at).pose),drawing(before));
-  const steps=c.bridge.route,gaitSteps=steps.filter(s=>s.pose.atlas===Motion.clips[direction].atlas);
+  const steps=c.bridge.route,gaitSteps=steps.filter(s=>s.pose.atlas===clip.atlas&&s.pose.walkRecovery===undefined);
   assert.equal(gaitSteps[0].pose.frame,frame);
-  for(let i=1;i<gaitSteps.length;i++)assert.equal(gaitSteps[i].pose.frame,(gaitSteps[i-1].pose.frame+1)%8);
+  for(let i=1;i<gaitSteps.length;i++)assert.equal(gaitSteps[i].pose.frame,clip.frames[(clip.frames.indexOf(gaitSteps[i-1].pose.frame)+1)%clip.frames.length]);
   assert.ok(gait.settleFrames[direction].includes(gaitSteps.at(-1).pose.frame));
   assert.ok(gaitSteps.length<=4);
+  const releases=steps.filter(s=>s.pose.atlas===clip.atlas&&s.pose.walkRecovery!==undefined);
+  assert.equal(releases.length,1);
+  assert.equal(releases[0].pose.frame,gaitSteps.at(-1).pose.frame,'gathering feet retains the completed support pose');
+  assert.ok(steps.indexOf(releases[0])>steps.indexOf(gaitSteps.at(-1)));
   assert.deepEqual(steps.filter(s=>s.pose.atlas==='custom-turn').map(s=>s.pose.frame),Motion.clips['stop-'+direction].frames);
   assert.ok(!steps.some(s=>s.pose.atlas==='custom-turn'&&[9,11].includes(s.pose.frame)));
   assert.equal(drawing(c.sample(stop,at+c.bridge.duration).pose),drawing(Motion.sample('idle',0)));

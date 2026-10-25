@@ -10,11 +10,12 @@ const { complete, endpoint } = require('./chat.cjs');
 const { monitor } = require('./environment.cjs');
 const physics = require('./physics.cjs');
 const {advanceWalk,gait,gaitElapsed}=require('./walk.cjs');
+const {createFrameLoop}=require('./frame-loop.cjs');
 const root = path.join(__dirname, '../..');
 const arg = key => process.argv.find(v => v.startsWith(`--${key}=`))?.slice(key.length + 3);
 const testMode = Boolean(arg('test-user-data'));
 if (testMode) app.setPath('userData', path.resolve(arg('test-user-data')));
-let pet, panel, tray, store, vault, settings, timer, stopMonitor, quitting = false, locked = false;
+let pet, panel, tray, store, vault, settings, frameLoop, stopMonitor, quitting = false, locked = false;
 let drag = null, target = null, walkRemainder = 0, walkTravel = 0, walkPhase = 0, walkRun = null, nextWalk = Date.now() + 6000 + Math.random()*4000, previousTick = Date.now();
 let context = {}, lastForeign = {}, lastPointer = '', lastState = '', lastPoll = 0, lastEnvironment = 0;
 let controller = null, history = [], capture = null, captureAt = 0, autoVisionAt = Date.now() + 120000;
@@ -80,15 +81,16 @@ function openPanel() {
 function rebuildMenu() {
   tray?.setContextMenu(Menu.buildFromTemplate([
     { label: '大肥鱼 · 桌面伙伴', enabled: false }, { label: '聊天与陪伴', click: openPanel },
-    { label: '喂一口 token', click: () => brain.interact('feed') },
-    { label: '一起专注 25 分钟', click: () => brain.setMode('focus', 25) },
-    { label: '安静陪伴', type: 'checkbox', checked: brain.mode === 'quiet', click: () => brain.setMode(brain.mode === 'quiet' ? 'company' : 'quiet') },
+    { label: '喂一口 token', click: () => { finishWalkPreview(); brain.interact('feed'); } },
+    { label: '一起专注 25 分钟', click: () => { finishWalkPreview(); brain.setMode('focus', 25); } },
+    { label: '安静陪伴', type: 'checkbox', checked: brain.mode === 'quiet', click: item => { finishWalkPreview(); brain.setMode(item.checked ? 'quiet' : 'company'); } },
     { type: 'separator' },
-    { label: '自动散步', type: 'checkbox', checked: settings.autoWander, click: () => { settings.autoWander = !settings.autoWander; persist(); rebuildMenu(); } },
+    { label: '自动散步', type: 'checkbox', checked: settings.autoWander, click: () => { finishWalkPreview(); settings.autoWander = !settings.autoWander; persist(); rebuildMenu(); } },
+    { label: walkPreviewTimers.length ? '停止走动演示' : '演示左右走动', click: () => { if (walkPreviewTimers.length) finishWalkPreview(); else previewWalking(); } },
     { label: '始终置顶', type: 'checkbox', checked: settings.alwaysOnTop, click: () => { settings.alwaysOnTop = !settings.alwaysOnTop; persist(); applySettings(); } },
     { label: '鼠标穿透 · Ctrl+Alt+P', type: 'checkbox', checked: settings.clickThrough, click: toggleThrough },
-    { label: pet?.isVisible() ? '暂时隐藏' : '显示大肥鱼', click: () => { if(settings.scale===0)openPanel();else pet.isVisible() ? pet.hide() : pet.showInactive(); rebuildMenu(); } },
-    { label: '回到屏幕内', click: () => { stopWalk(); pet.setBounds(safeBounds(null)); savePosition(); } },
+    { label: pet?.isVisible() ? '暂时隐藏' : '显示大肥鱼', click: () => { finishWalkPreview(); if(settings.scale===0)openPanel();else pet.isVisible() ? pet.hide() : pet.showInactive(); rebuildMenu(); } },
+    { label: '回到屏幕内', click: () => { finishWalkPreview(); stopWalk(); pet.setBounds(safeBounds(null)); savePosition(); } },
     { label: '退出', click: () => { quitting = true; app.quit(); } },
   ]));
 }
@@ -121,6 +123,7 @@ async function captureForeground() {
 async function chat(text, image, automatic = false, requestId = null) {
   if (controller) throw new Error('我还在回复，可以先取消上一条。');
   if (typeof text !== 'string' || !text.trim() || text.length > 8000) throw new Error('请填写 1 到 8000 字的问题。');
+  finishWalkPreview();
   const current = new AbortController(); controller = current; brain.chatBusy = true; stopWalk();
   brain.play('think', automatic ? '' : '让我把这个问题嚼一嚼。', 60000, 90);
   const next = automatic ? [{ role: 'user', content: text }] : [...history, { role: 'user', content: text }];
@@ -140,6 +143,9 @@ async function chat(text, image, automatic = false, requestId = null) {
   } finally { if (controller === current) controller = null; brain.chatBusy = false; if (brain.action === 'think') brain.until = 0; }
 }
 function registerIpc() {
+  ipcMain.on('pet:frame', e => {
+    if (trusted(e) && e.sender === pet.webContents) frameLoop?.frame();
+  });
   ipcMain.on('pet:ready', e => {
     if (!trusted(e)) return;
     send(BrowserWindow.fromWebContents(e.sender), 'pet:settings', publicSettings()); send(BrowserWindow.fromWebContents(e.sender), 'pet:state', brain.snapshot());
@@ -158,7 +164,7 @@ function registerIpc() {
   ipcMain.on('pet:menu', e => { if (trusted(e)) tray.popUpContextMenu(); });
   ipcMain.on('pet:hit', (e, hit) => { if (e.sender === pet?.webContents && typeof hit === 'boolean') { pointerInside = hit; setIgnore(settings.clickThrough || (!hit && !drag)); } });
   ipcMain.on('pet:visual-schedule', (e, value) => { if (trusted(e) && e.sender === pet?.webContents) brain.reserveVisual(value); });
-  ipcMain.on('pet:interact', (e, kind) => { if (trusted(e)) { stopWalk(); nextWalk = Date.now() + 10000 + Math.random()*8000; brain.interact(kind); } });
+  ipcMain.on('pet:interact', (e, kind) => { if (trusted(e)) { finishWalkPreview(); stopWalk(); nextWalk = Date.now() + 10000 + Math.random()*8000; brain.interact(kind); } });
   ipcMain.on('pet:drag', (e, value) => {
     if (!trusted(e) || !value) return; const { phase, point } = value;
     if (phase === 'end') { if (drag) {
@@ -166,7 +172,7 @@ function registerIpc() {
       brain.until=0;brain.play('fall','',60000,95);send(pet,'pet:kinetics',{vx:0,vy:0});nextWalk=Date.now()+90000;
     } return; }
     if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
-    if (phase === 'start') { const b = pet.getBounds(); drag = { x: point.x - b.x, y: point.y - b.y, px:point.x,py:point.y,at:Date.now(),vx:0,vy:0 };flight=null;support=null;stopWalk();brain.interact('drag'); }
+    if (phase === 'start') { finishWalkPreview(); const b = pet.getBounds(); drag = { x: point.x - b.x, y: point.y - b.y, px:point.x,py:point.y,at:Date.now(),vx:0,vy:0 };flight=null;support=null;stopWalk();brain.interact('drag'); }
     if (phase === 'move' && drag) {
       const dt=Math.max(.016,(Date.now()-drag.at)/1000);
       drag.vx=Math.max(-800,Math.min(800,(point.x-drag.px)/dt));drag.vy=Math.max(-800,Math.min(800,(point.y-drag.py)/dt));
@@ -177,6 +183,7 @@ function registerIpc() {
   handle('companion:settings', () => ({ settings: publicSettings(), history, state: brain.snapshot() }));
   handle('companion:scale', value => {
     if(typeof value!=='number'||!Number.isFinite(value)||value<0||value>1)throw new Error('大小应在 0% 到 100% 之间。');
+    finishWalkPreview();
     const b=pet.getBounds(),oldFoot=b.y+physics.footOffset({...b,bodyWidth:300*settings.scale}),wasZero=settings.scale===0;
     settings.scale=Math.round(value*100)/100;stopWalk();flight=null;support=null;
     const s=size();pet.setBounds(safeBounds({x:b.x+(b.width-s.width)/2,y:oldFoot-physics.footOffset(physicalSize())}));
@@ -185,6 +192,7 @@ function registerIpc() {
   });
   handle('companion:save', value => {
     if (!value || typeof value !== 'object') throw new Error('设置格式不正确。');
+    finishWalkPreview();
     const next = sanitizeSettings({ ...settings, ...value }); endpoint(next.baseUrl); const previous = settings; settings = next;
     try {
       if (typeof value.apiKey === 'string' && value.apiKey.length <= 4096) vault.set(value.apiKey.trim());
@@ -195,7 +203,7 @@ function registerIpc() {
     if(previous.scale===0&&settings.scale>0)pet.showInactive();
     applySettings(previous.startAtLogin !== settings.startAtLogin); return publicSettings();
   });
-  handle('companion:mode', value => { brain.setMode(value?.mode, Number(value?.minutes) || 25); stopWalk(); rebuildMenu(); return brain.snapshot(); });
+  handle('companion:mode', value => { finishWalkPreview(); brain.setMode(value?.mode, Number(value?.minutes) || 25); stopWalk(); rebuildMenu(); return brain.snapshot(); });
   handle('companion:chat', async value => {
     const image = value?.attach && settings.vision && Date.now() - captureAt < 120000 ? capture : null;
     if (value?.attach && !image) throw new Error('画面预览已过期，请重新截取。');
@@ -242,14 +250,15 @@ function physicalTick(dt) {
 function tick() {
   const now = Date.now(); const dt = Math.min(0.1, (now - previousTick) / 1000); previousTick = now;
   if (!pet || pet.isDestroyed()) return;
-  const full = settings.quietFullscreen && context.fullscreen;
+  const full = !walkPreviewTimers.length && settings.quietFullscreen && context.fullscreen;
   if (!locked && now - lastEnvironment > 3000) {
-    lastEnvironment = now; brain.context({ idleSeconds: powerMonitor.getSystemIdleTime(), locked, fullscreen: full, category: settings.environment ? context.category : 'other' });
+    lastEnvironment = now; brain.context({ idleSeconds: walkPreviewState ? 0 : powerMonitor.getSystemIdleTime(), locked, fullscreen: full, category: settings.environment ? context.category : 'other' });
   }
   brain.locked = locked || Boolean(full); const state = brain.tick(); const signature = JSON.stringify(state);
   if (lastState !== signature) { lastState = signature; send(pet, 'pet:state', state); send(panel, 'pet:state', state); }
-  if (locked || !pet.isVisible()) { stopWalk(); return; }
+  if (locked || !pet.isVisible()) { finishWalkPreview(); stopWalk(); return; }
   physicalTick(dt);
+  advanceWalkPreview(now);
   const interval = full || powerMonitor.isOnBatteryPower() ? 120 : 40;
   if (now - lastPoll >= interval) {
     lastPoll = now; const b = pet.getBounds(); const cursor = screen.getCursorScreenPoint(); const key = `${cursor.x},${cursor.y},${b.x},${b.y}`;
@@ -259,7 +268,7 @@ function tick() {
     }
   }
   const walking = ['left', 'right'].includes(brain.action) && target !== null;
-  if (drag || flight || !settings.autoWander || (!brain.canWander() && !walking) || full) stopWalk();
+  if (drag || flight || !(settings.autoWander || walkPreviewTimers.length) || walkPreviewState?.pendingTarget != null || (!brain.canWander() && !walking) || full) stopWalk();
   else if (now >= nextWalk) {
     const b = pet.getBounds(); const area = screen.getDisplayMatching(b).workArea;
     if (target === null) {
@@ -295,9 +304,55 @@ function tick() {
     }).catch(() => { notify('这次画面观察未完成，已暂停自动观察。'); settings.autoVision = false; persist(); applySettings(); });
   }
 }
+// 用户主动调用的有限往返演示，仍使用正式步态和收步控制器。
+let walkPreviewTimers = [];
+let walkPreviewState = null;
+function advanceWalkPreview(now) {
+  if (!walkPreviewState || walkPreviewState.pendingTarget == null || now < walkPreviewState.readyAt || !brain.canWander()) return;
+  // Keep the requested destination separate while the renderer finishes rising.
+  // Ordinary stopWalk calls during that wait must not discard the demonstration.
+  target = walkPreviewState.pendingTarget;
+  walkPreviewState.pendingTarget = null; nextWalk = now;
+}
+function finishWalkPreview() {
+  if (!walkPreviewState) return;
+  const saved = walkPreviewState, elapsed = Date.now() - saved.started;
+  for (const timer of walkPreviewTimers) clearTimeout(timer);
+  walkPreviewTimers = []; walkPreviewState = null;
+  stopWalk(true);
+  if (brain.mode !== saved.mode) brain.setMode(saved.mode);
+  brain.focusUntil = saved.focusUntil; brain.away = saved.away;
+  brain.wanderAfter = Math.max(brain.wanderAfter, saved.wanderAfter);
+  for (const field of ['nextIdle', 'nextExpressive', 'nextStory', 'contextAfter']) brain[field] = saved[field] + elapsed;
+  nextWalk = Math.max(Date.now() + 1000, saved.nextWalk + elapsed);
+  rebuildMenu();
+}
+function previewWalking() {
+  if (!pet || pet.isDestroyed() || walkPreviewState || drag || flight || locked || brain.chatBusy || settings.scale === 0) return;
+  walkPreviewState = { started: Date.now(), nextWalk };
+  for (const field of ['mode', 'focusUntil', 'away', 'wanderAfter', 'nextIdle', 'nextExpressive', 'nextStory', 'contextAfter']) walkPreviewState[field] = brain[field];
+  const origin = pet.getBounds();
+  const area = screen.getDisplayMatching(origin).workArea;
+  const distance = origin.x - area.x >= 140 ? -140 : 140;
+  const command = offset => {
+    stopWalk(true);
+    brain.nextExpressive = brain.nextIdle = brain.nextStory = brain.contextAfter = Date.now() + 30000;
+    walkPreviewState.pendingTarget = Math.max(area.x, Math.min(area.x + area.width - origin.width, origin.x + offset));
+    // Leave one rendering turn for its visual reservation, and preserve the
+    // complete wake/stand reservation created when the mode changes.
+    walkPreviewState.readyAt = Math.max(Date.now() + 100, brain.wanderAfter);
+  };
+  pet.showInactive();
+  // Temporary wandering is granted by the preview lifetime, never saved as a preference.
+  stopWalk(true); brain.setMode('company'); brain.until = brain.nativeUntil = Date.now(); brain.away = false;
+  command(distance);
+  walkPreviewTimers.push(setTimeout(() => command(0), 6500));
+  walkPreviewTimers.push(setTimeout(finishWalkPreview, 13000));
+  rebuildMenu();
+}
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => pet?.showInactive());
+  app.on('second-instance', (_event, argv) => { pet?.showInactive(); if (argv.includes('--walk-preview')) previewWalking(); });
   app.whenReady().then(() => {
     store = createSettingsStore(app.getPath('userData')); settings = store.load(); vault = createVault(app.getPath('userData'), safeStorage);
     app.setAppUserModelId('com.yunyuesama.codexpet');
@@ -316,10 +371,10 @@ else {
     const resume = () => { locked = false; previousTick = Date.now(); brain.until = 0; brain.play('wave', '回来啦。', 3000, 50); };
     powerMonitor.on('unlock-screen', resume); powerMonitor.on('resume', resume);
     syncMonitor();
-    // 单一自适应调度；隐藏/锁屏降频，停止高频窗口与光标采样。
-    const schedule = () => { tick(); if (!quitting) timer = setTimeout(schedule, locked ? 1000 : !pet.isVisible() ? 500 : 16); };
-    schedule(); if (process.argv.includes('--panel')) openPanel();
+    // 可见时跟随画面刷新；隐藏/锁屏降频，保留渲染暂停时的恢复心跳。
+    frameLoop = createFrameLoop({ tick, isActive: () => !locked && pet.isVisible(), idleDelay: () => locked ? 1000 : 500 });
+    frameLoop.start(); if (process.argv.includes('--panel')) openPanel();
   });
 }
-app.on('before-quit', () => { quitting = true; clearInterval(timer); stopMonitor?.(); controller?.abort(); globalShortcut.unregisterAll(); });
+app.on('before-quit', () => { quitting = true; frameLoop?.stop(); stopMonitor?.(); controller?.abort(); globalShortcut.unregisterAll(); });
 app.on('window-all-closed', () => {});

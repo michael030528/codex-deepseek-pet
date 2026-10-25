@@ -148,7 +148,7 @@ class Companion {
     this.lastDecay = now;
     if (this.focusUntil && now >= this.focusUntil) {
       this.focusUntil = 0; this.mode = 'company'; this.focusCount++;
-      this.play('stretch', '歇一会儿？我想伸个懒腰了。', 5500, 70);
+      this.play('stretch', '歇一会儿？我想活动一下腰。', 5500, 70);
     }
     if (now >= this.until && !this.chatBusy && this.action !== 'idle' && !(this.away && this.action === 'sleep')) this.play(this.action==='sleep'?'wake':'idle', '', 0, 0);
     if (now >= this.nextIdle && !this.locked && !this.away && !this.chatBusy && this.mode === 'company' && now >= this.until) {

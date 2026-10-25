@@ -12,9 +12,10 @@
  const clips={
   idle:clip('idle',[0],1000,true),breathe:clip('idle',[0],1400),
   shift:clip('idle',[0,1,0],[300,600,400]),settle:clip('idle',[0,1,0],[300,500,400]),
-  stretch:timeline('stretch',[['raise',[0,1],[180,260]],['stretch',[2],700],['lower',[3,0],[260,160]]]),
-  right:clip('running-right',seq(8),110,true),left:clip('running-left',seq(8),110,true),
-  'stop-right':clip('turn',[8,3,2,1,0],80),'stop-left':clip('turn',[10,7,6,5,4],80),
+  stretch:timeline('stretch',[['prepare',[0],120],['twist-left',[0],720],['twist-right',[0],720],['return',[0],720],['settle',[0],200]]),
+  right:clip('running-right',[1,2,3,4,5,6,7,0],110,true),left:clip('running-left',[2,3,4,5,6,7,0,1],110,true),
+  // 直身步态收脚后直接转身，不能插入旧版前倾握拳的起跑姿势。
+  'stop-right':clip('turn',[3,2,1,0],[100,100,100,100]),'stop-left':clip('turn',[7,6,5,4],[100,100,100,100]),
   wave:timeline('waving',[['raise',[0],180],['greet',[1,2,1,2],180],['lower',[4,5,0],[100,100,120]]]),
   happy:timeline('affection',[['notice',[0],180],['enjoy',[1,2,1],[320,600,320]],['relax',[0],180]]),
   eat:timeline('eat',[['reach',[0,1],180],['lift',[2],220],['taste',[3,4],[260,360]],['put-away',[5,6,7,0],[180,160,160,140]]]),
@@ -44,7 +45,9 @@
  // Release from the visible pose. Early interruptions put props back; late
  // interruptions lower empty hands and never replay a bite or another bow.
  const exitRoutes={
-  affection:{1:[1,0],2:[2,1,0]},stretch:{1:[1,3,0],2:[2,3,0],3:[3,0]},
+  // 空中被打断时仍经过下降帧；准备阶段取消则直接站稳。
+  jumping:{0:[0,4],1:[1,2,3,4],2:[2,3,4],3:[3,4]},
+  affection:{1:[1,0],2:[2,1,0]},stretch:{1:[1,3,0],3:[3,0]},
   eat:{1:[1,0],2:[2,1,0],3:[3,5,6,7,0],4:[4,5,6,7,0],5:[5,6,7,0],6:[6,7,0],7:[7,0]},
   sneak:{1:[1,0],2:[2,1,0],3:[3,4,5,6,0],4:[4,5,6,0],5:[5,6,0],6:[6,0]},
   hum:{1:[1,0],2:[2,0]},peek:{1:[1,0],2:[2,0]},shock:{1:[1,0],2:[2,1,0]},
@@ -64,11 +67,11 @@
  }
  const blinkFrame=3;
  const atlasNames=[...new Set([...Object.values(clips).map(c=>c.atlas),'custom-turn'])];
- const turnFrames={right:[0,1,2,3,8,8],left:[4,5,6,7,10,10]};
+ const turnFrames={right:[0,1,2,3,3,3],left:[4,5,6,7,7,7]};
  // Distance is measured in native screen pixels. The authored cells are 512px
  // and the displayed canvas is 300px at scale 1; one gait cycle covers a stride.
  const gait=Object.freeze({cellSize:512,canvasSize:300,speed:150,turnMs:600,accelerationMs:300,
-  strideSourcePx:Object.freeze({left:252,right:255}),
+  strideSourcePx:Object.freeze({left:181.44,right:183.6}),
   settleFrames:Object.freeze({left:Object.freeze([2,6]),right:Object.freeze([1,5])})});
  function gaitElapsed(distance,scale,direction){
   const c=clips[direction],stride=gait.strideSourcePx[direction];
@@ -100,6 +103,7 @@
   return [...frames].sort((a,b)=>a-b);
  }
  function isNeutral(p){
+  if(p?.stretchTime!==undefined)return p.stretchTime<=120||p.stretchTime>=2280;
   if(!p)return false;if(p.atlas==='custom-jumping')return p.frame===4;
   return p.frame===0&&atlasNames.includes(p.atlas)&&!['custom-running-left','custom-running-right'].includes(p.atlas)||p.atlas==='custom-turn'&&p.frame===4||p.atlas==='custom-token-game'&&p.frame===6;
  }
@@ -162,6 +166,8 @@
   const frame=c.frames[index],phase=reduced?0:elapsed/1000;
   const micro=reduced?0:Math.sin(Math.PI*Math.min(1,elapsed/duration))**2;
   return {atlas:c.atlas,frame,columns:4,flip:false,walking,blink:!reduced&&action==='idle'?blinkAt(elapsed):0,
+   ...(walking?{walkBlend:reduced?0:Math.min(1,elapsed/140)**2*(3-2*Math.min(1,elapsed/140))}:{}),
+   ...(action==='stretch'&&!reduced?{stretchTime:elapsed}:{}),
    // Authored running and jumping drawings already contain their foot lift.
    x:0,y:action==='breathe'?-1.5*micro:0,
    scaleX:1,scaleY:1,

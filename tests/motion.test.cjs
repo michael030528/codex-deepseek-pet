@@ -55,11 +55,13 @@ test('both walking directions turn for 600ms then use independent non-mirrored g
   for(const [index,ms]of clips[action].times.entries()){assert.equal(sample(action,at).frame,clips[action].frames[index]);at+=ms;}
   assert.equal(sample(action,at).frame,clips[action].frames[0]);
   const stop='stop-'+action,c=clips[stop];
-  assert.deepEqual(c.frames,frames.slice(0,-1).reverse());assert.equal(duration(c),400);
+  assert.deepEqual(c.frames,[...new Set(frames)].reverse());assert.equal(duration(c),400);
   assert.equal(sample(stop,0).frame,frames.at(-2));assert.equal(sample(stop,duration(c)-1).frame,frames[0]);
   assert.equal(sample(stop,duration(c)).atlas,'custom-idle');
  }
  assert.equal(requiredFrames('custom-turn').includes(9),false,'retired high-kick launch must not preload');
+ assert.equal(requiredFrames('custom-turn').includes(8),false,'retired forward lean must not reappear at stop');
+ assert.equal(requiredFrames('custom-turn').includes(10),false,'retired opposite forward lean must not reappear at stop');
  assert.equal(requiredFrames('custom-turn').includes(11),false,'retired opposite launch must not preload');
 });
 

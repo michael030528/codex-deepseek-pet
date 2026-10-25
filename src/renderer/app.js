@@ -6,6 +6,7 @@ let lastHit=false,lastClick=0,lastFrameAt=0,lastDraw='',nextFrameAt=0;
 let kinetics={vx:0,vy:0},kineticsAt=0,sway=0;
 const walkClock=new PetMotion.WalkClock();
 const images={},masks={},spriteFrames={};let assetsReady=false,lastPose=null;
+let stretchRig=null,walkRig=null;
 const renderMode='authored-frames';
 let poseKey='',transitionFrom=null,transitionAt=0;
 let lastVisualSchedule='';
@@ -40,21 +41,23 @@ async function loadAssets(){for(const name of PetMotion.atlasNames)await new Pro
   }catch(error){reject(error);}
  };img.onerror=reject;img.src=`../../assets/whale/${name}.png`;
 });}
-loadAssets().then(()=>{assetsReady=true;}).catch(()=>{bubble.textContent='角色素材暂时无法加载，可从托盘打开设置。';bubble.classList.add('visible');});
+loadAssets().then(()=>{stretchRig=PetStretchRig.create(spriteFrames['custom-stretch'][0]);walkRig=PetWalkRig.create(spriteFrames);assetsReady=true;}).catch(()=>{bubble.textContent='角色素材暂时无法加载，可从托盘打开设置。';bubble.classList.add('visible');});
 function paint(p,alpha=1){
- const frame=p.blink>.35?PetMotion.blinkFrame:p.frame,img=spriteFrames[p.atlas][frame];
+ const frame=p.blink>.35?PetMotion.blinkFrame:p.frame;
+ const img=walkRig&&PetWalkRig.direction(p)?walkRig.render(p):p.stretchTime!==undefined&&stretchRig?stretchRig.render(p):spriteFrames[p.atlas][frame];
  ctx.save();ctx.globalAlpha=alpha;ctx.translate(300+p.x,560+p.y);ctx.rotate(p.rotation);
- // 每一帧都是完整角色，头、躯干和四肢一起活动；眨眼也不叠加局部眼片。
+ // 扭腰仅沿水平方向移动原图像素，脚底和画布纵坐标保持原位。
  ctx.drawImage(img,-300,-560,600,600);
  ctx.restore();
 }
 function draw(now){
  requestAnimationFrame(draw);
+ if(!document.hidden&&assetsReady)api?.frame?.();
  const reduced=settings.reducedMotion||motionPreference.matches;
  if(document.hidden||!assetsReady){nextFrameAt=now;return;}
- if(now<nextFrameAt-1)return;
- const interval=reduced?250:1000/60;
- nextFrameAt+=interval;if(nextFrameAt<now-interval)nextFrameAt=now+interval;
+ const interval=reduced?250:(state.action==='stretch'||lastPose?.stretchTime!==undefined)?0:1000/60;
+ if(interval&&now<nextFrameAt-1)return;
+ if(interval){nextFrameAt+=interval;if(nextFrameAt<now-interval)nextFrameAt=now+interval;}else nextFrameAt=now;
  const dt=Math.min(.1,(now-lastFrameAt)/1000);lastFrameAt=now;
  const walk=walkClock.forState(state);
  const visual=transitionController.sample(state,Date.now(),{reduced,walkElapsed:walk.elapsed});
@@ -76,7 +79,7 @@ function draw(now){
  if(pose.walking)pose.x+=walk.offset*2/Math.max(.01,settings.scale??1);
  const key=JSON.stringify(pose);
  if(key!==lastDraw){lastDraw=key;ctx.clearRect(0,0,600,600);
-  // 始终绘制一张完整原画，移动和倾斜不改变脸型或身体比例。
+  // 绘制完整缓存画面；行走上身复用转身原画，避免换图时脸型和发量跳变。
   paint(pose);lastPose=pose;updateHit();
  }
  bubble.classList.toggle('visible',Boolean(state.message)&&Date.now()<state.until);
@@ -88,7 +91,9 @@ function updateHit(){
  let opaque=false;
  if(lastPose){const p=lastPose,dx=x-300-p.x,dy=y-560-p.y,c=Math.cos(p.rotation),s=Math.sin(p.rotation);
   const sx=c*dx+s*dy+300,sy=-s*dx+c*dy+560;
-  if(sx>=0&&sx<600&&sy>=0&&sy<600){const hitAtlas=p.atlas,img=images[hitAtlas],cell=img.width/p.columns;
+  if(walkRig&&PetWalkRig.direction(p))opaque=walkRig.hit(p,sx/600*512,sy/600*512);
+  else if(p.stretchTime!==undefined&&stretchRig)opaque=stretchRig.hit(p,sx/600*512,sy/600*512);
+  else if(sx>=0&&sx<600&&sy>=0&&sy<600){const hitAtlas=p.atlas,img=images[hitAtlas],cell=img.width/p.columns;
    const hitFrame=p.blink>.35?PetMotion.blinkFrame:p.frame;
    const px=hitFrame%p.columns*cell+Math.floor(sx/600*cell),py=Math.floor(hitFrame/p.columns)*cell+Math.floor(sy/600*cell);
    const bit=py*img.width+px;opaque=opaque||Boolean(masks[hitAtlas][bit>>3]&(1<<(bit&7)));}

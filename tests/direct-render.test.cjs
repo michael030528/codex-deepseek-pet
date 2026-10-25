@@ -11,7 +11,7 @@ test('production renderer has no optical-flow resource or image-warp dependency'
  assert.doesNotMatch(source,/\b(?:PetFlow|flowRenderer|frameMix|nextAtlas|nextFrame|entryFlow)\b/);
 });
 
-test('every action, turn and interrupted story paints exactly one complete authored bitmap',()=>{
+test('every action, turn and interrupted story paints one complete prepared surface',()=>{
  const paintSource=source.slice(source.indexOf('function paint('),source.indexOf('function draw('));
  assert.ok(paintSource.length>0);
  const spriteFrames={},calls=[];
@@ -19,7 +19,7 @@ test('every action, turn and interrupted story paints exactly one complete autho
   spriteFrames[atlas]={};for(const frame of requiredFrames(atlas))spriteFrames[atlas][frame]={atlas,frame};
  }
  const ctx={save(){},restore(){},translate(){},rotate(){},scale(x,y){assert.equal(Math.abs(x),1);assert.equal(y,1);},drawImage(...args){calls.push({args,alpha:this.globalAlpha});}};
- const sandbox={ctx,spriteFrames,PetMotion:require('../src/renderer/motion.js')};
+ const sandbox={ctx,spriteFrames,stretchRig:null,walkRig:{render:p=>spriteFrames[p.atlas][p.frame]},PetWalkRig:require('../src/renderer/walk-rig.js'),PetMotion:require('../src/renderer/motion.js')};
  vm.runInNewContext(paintSource+';globalThis.paintAuthored=paint;',sandbox);
  const check=p=>{
   calls.length=0;sandbox.paintAuthored(p);assert.equal(calls.length,1);

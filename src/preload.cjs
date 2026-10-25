@@ -6,6 +6,7 @@ const subscribe = (channel, callback) => {
 };
 contextBridge.exposeInMainWorld('petApi', {
   ready: () => ipcRenderer.send('pet:ready'),
+  frame: () => ipcRenderer.send('pet:frame'),
   onState: cb => subscribe('pet:state', cb), onHitPoint: cb => subscribe('pet:hit-point', cb),
   onKinetics: cb => subscribe('pet:kinetics', cb),
   onWalkOffset: cb => subscribe('pet:walk-offset', cb),

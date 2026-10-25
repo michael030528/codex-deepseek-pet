@@ -47,7 +47,7 @@ $('#settings-form').onsubmit=async e=>{e.preventDefault();$('#save-settings').di
 $('#export').onclick=async()=>{const dest=await call(()=>api.exportPet());if(dest)notice(`宠物包已导出到：${dest}`);};
 let sizeTimer=null;
 $('#size-slider').oninput=()=>{const percent=Number($('#size-slider').value);$('#size-output').textContent=`${percent}%`;clearTimeout(sizeTimer);sizeTimer=setTimeout(()=>call(()=>api.scale(percent/100)),60);};
-const expressions=[['摸摸','pet'],['吃 token','feed'],['跳舞','dance'],['庆祝','celebrate'],['打招呼','wave'],['探头','peek'],['偷偷伸手','sneak'],['吃饱满足','satisfied'],['认真审阅','review'],['震惊','shock'],['鼓腮赌气','pout'],['认错','sorry'],['偷偷哼歌','hum'],['饭前小憩','meal-break'],['偷吃玩字谜','token-game'],['轻摇尾巴','tail-sway'],['蜷起来','curl'],['伸懒腰','stretch']];
+const expressions=[['摸摸','pet'],['吃 token','feed'],['跳舞','dance'],['庆祝','celebrate'],['打招呼','wave'],['探头','peek'],['偷偷伸手','sneak'],['吃饱满足','satisfied'],['认真审阅','review'],['震惊','shock'],['鼓腮赌气','pout'],['认错','sorry'],['偷偷哼歌','hum'],['饭前小憩','meal-break'],['偷吃玩字谜','token-game'],['轻摇尾巴','tail-sway'],['蜷起来','curl'],['扭腰','stretch']];
 for(const [name,kind]of expressions){const button=document.createElement('button');button.textContent=name;button.onclick=()=>api?.interact(kind);$('#expression-gallery').append(button);}
 function moveToken(){const board=$('#game-board');const token=$('#token');token.style.left=`${12+Math.random()*Math.max(1,board.clientWidth-72)}px`;token.style.top=`${12+Math.random()*Math.max(1,board.clientHeight-72)}px`;}
 function stopGame(){clearInterval(gameTimer);gameTimer=null;$('#token').hidden=true;$('#game-start').disabled=false;$('#score').textContent=`接住 ${score} 口！大肥鱼收好了。`;api?.interact(score>5?'celebrate':'feed');}
